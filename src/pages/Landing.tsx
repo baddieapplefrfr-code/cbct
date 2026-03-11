@@ -44,8 +44,8 @@ export default function Landing() {
         setInsight(`Your channel has ${formatCount(channelData.subscribers)} subscribers. Let's find your biggest growth opportunities.`);
       }
       setStep("success");
-    } catch (err: any) {
-      const msg = err?.message || "";
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("quota")) setError("YouTube API quota reached. Please try again in a few hours.");
       else if (msg.includes("not found") || msg.includes("404")) setError("Channel not found. Try: youtube.com/@channelname");
       else setError(msg || "Something went wrong. Please try again.");
