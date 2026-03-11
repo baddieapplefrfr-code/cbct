@@ -1,11 +1,24 @@
+// ── AI Service — OllamaFreeAPI (no key needed) + OpenRouter fallback ──
+const OLLAMA_URL = "https://ollama.freeapi.org/api/chat";
 const OR_KEY = "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";
 const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OR_HEADERS = {
+  "Content-Type": "application/json",
+  "Authorization": `Bearer ${OR_KEY}`,
+  "HTTP-Referer": "https://creatorbrain.app",
+  "X-Title": "CreatorBrain",
+};
 
-// Verified working models — primary first, free fallbacks after
-const MODELS = [
-  "anthropic/claude-3-haiku",
-  "openai/gpt-4o-mini",
-  "meta-llama/llama-3.3-8b-instruct:free",
+const OLLAMA_MODELS = [
+  "llama3.2",
+  "llama3.1",
+  "mistral",
+  "gemma2",
+  "qwen2.5",
+];
+
+const OR_MODELS = [
+  "meta-llama/llama-3.1-8b-instruct:free",
   "mistralai/mistral-7b-instruct:free",
   "google/gemma-3-12b-it:free",
 ];
@@ -23,32 +36,57 @@ function setStatus(s: AIStatus) { aiStatus = s; listeners.forEach(fn => fn(s)); 
 const cache = new Map<string, { result: string; ts: number }>();
 const CACHE_MS = 45_000;
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+async function tryOllama(model: string, sys: string, user: string, maxTokens: number): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const res = await fetch(OLLAMA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: sys },
+          { role: "user", content: user }
+        ],
+        stream: false,
+        options: { num_predict: maxTokens }
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.message?.content ?? null;
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
 }
 
-async function tryModel(model: string, sys: string, user: string, maxTokens: number, temp: number): Promise<string | null> {
+async function tryOpenRouter(model: string, sys: string, user: string, maxTokens: number, temp: number): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const res = await withTimeout(fetch(OR_URL, {
+    const res = await fetch(OR_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OR_KEY}`,
-        "HTTP-Referer": "https://creatorteam.netlify.app",
-        "X-Title": "CreatorBrain",
-      },
+      headers: OR_HEADERS,
       body: JSON.stringify({
         model,
         messages: [{ role: "system", content: sys }, { role: "user", content: user }],
         max_tokens: maxTokens,
         temperature: temp,
       }),
-    }), 18000);
-    if (!res || !res.ok) { console.warn(`[AI] ${model} → ${res?.status}`); return null; }
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.status === 429 || res.status === 503 || !res.ok) return null;
     const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    return typeof content === "string" && content.length > 0 ? content : null;
-  } catch (e) { console.warn(`[AI] ${model} error:`, e); return null; }
+    return data.choices?.[0]?.message?.content ?? null;
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
 }
 
 export async function callAI(
@@ -61,13 +99,29 @@ export async function callAI(
   const hit = cache.get(cacheKey);
   if (hit && Date.now() - hit.ts < CACHE_MS) return hit.result;
 
-  for (let i = 0; i < MODELS.length; i++) {
+  // Try OllamaFreeAPI first (no key needed, free)
+  for (let i = 0; i < OLLAMA_MODELS.length; i++) {
     if (i === 2) setStatus("slow");
-    const r = await tryModel(MODELS[i], systemPrompt, userPrompt, maxTokens, temperature);
-    if (r) { setStatus("ok"); cache.set(cacheKey, { result: r, ts: Date.now() }); return r; }
+    const r = await tryOllama(OLLAMA_MODELS[i], systemPrompt, userPrompt, maxTokens);
+    if (r) {
+      setStatus("ok");
+      cache.set(cacheKey, { result: r, ts: Date.now() });
+      return r;
+    }
   }
+
+  // Fallback to OpenRouter
+  for (const model of OR_MODELS) {
+    const r = await tryOpenRouter(model, systemPrompt, userPrompt, maxTokens, temperature);
+    if (r) {
+      setStatus("ok");
+      cache.set(cacheKey, { result: r, ts: Date.now() });
+      return r;
+    }
+  }
+
   setStatus("limited");
-  return "AI is briefly unavailable. Please click Try Again in a few seconds.";
+  return "AI is briefly resting. Your channel data loaded — please click Try Again in a few seconds.";
 }
 
 export async function streamAI(
@@ -75,47 +129,18 @@ export async function streamAI(
   userPrompt: string,
   onChunk: (text: string) => void
 ): Promise<string> {
-  for (const model of MODELS.slice(0, 3)) {
-    try {
-      const res = await withTimeout(fetch(OR_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${OR_KEY}`,
-          "HTTP-Referer": "https://creatorteam.netlify.app",
-          "X-Title": "CreatorBrain",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
-          max_tokens: 2000,
-          temperature: 0.7,
-          stream: true,
-        }),
-      }), 25000);
-      if (!res || !res.ok || !res.body) continue;
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let full = "", buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let idx: number;
-        while ((idx = buf.indexOf("\n")) !== -1) {
-          const line = buf.slice(0, idx).trim(); buf = buf.slice(idx + 1);
-          if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6).trim();
-          if (json === "[DONE]") break;
-          try { const c = JSON.parse(json).choices?.[0]?.delta?.content; if (c) { full += c; onChunk(c); } } catch {}
-        }
-      }
-      if (full.length > 10) { setStatus("ok"); return full; }
-    } catch { continue; }
+  // Use non-streaming callAI and simulate streaming for reliability
+  const result = await callAI(systemPrompt, userPrompt);
+  // Simulate streaming by chunking the response
+  const words = result.split(" ");
+  let full = "";
+  for (const word of words) {
+    const chunk = word + " ";
+    full += chunk;
+    onChunk(chunk);
+    await new Promise(r => setTimeout(r, 15));
   }
-  const fallback = await callAI(systemPrompt, userPrompt);
-  onChunk(fallback);
-  return fallback;
+  return full.trim();
 }
 
 export function parseJsonSafely(text: string): any {
@@ -123,10 +148,14 @@ export function parseJsonSafely(text: string): any {
   try { return JSON.parse(text); } catch {}
   const s = text.replace(/```(?:json)?\s*/g, "").replace(/```\s*/g, "").trim();
   try { return JSON.parse(s); } catch {}
-  const obj = s.match(/\{[\s\S]*\}/); if (obj) { try { return JSON.parse(obj[0]); } catch {} }
-  const arr = s.match(/\[[\s\S]*\]/); if (arr) { try { return JSON.parse(arr[0]); } catch {} }
+  const obj = s.match(/\{[\s\S]*\}/);
+  if (obj) { try { return JSON.parse(obj[0]); } catch {} }
+  const arr = s.match(/\[[\s\S]*\]/);
+  if (arr) { try { return JSON.parse(arr[0]); } catch {} }
   return null;
 }
+
 export const parseJsonFromAI = parseJsonSafely;
 export const parseJsonFromResponse = parseJsonSafely;
+export const callGroq = callAI;
 export default callAI;
