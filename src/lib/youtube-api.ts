@@ -68,6 +68,10 @@ export async function fetchCompleteChannelData(
   input: string,
   onProgress?: (progress: FetchProgress) => void
 ): Promise<ChannelData> {
+  if (!input || input.trim() === "") {
+    throw new Error("Please enter a valid YouTube channel URL or @handle");
+  }
+  
   let cleaned = input
     .trim()
     .replace("https://", "")
@@ -102,7 +106,10 @@ export async function fetchCompleteChannelData(
       const res = await fetch(
         `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&forHandle=${handleToTry}&key=${YT_API_KEY}`
       );
-      const data = await res.json();
+      const text = await res.text();
+      if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+      let data: any;
+      try { data = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
       if (data.error?.code === 403) {
         throw new Error("API quota exceeded. Please try again tomorrow.");
       }
@@ -123,7 +130,10 @@ export async function fetchCompleteChannelData(
       const res = await fetch(
         `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&id=${channelId}&key=${YT_API_KEY}`
       );
-      const data = await res.json();
+      const text = await res.text();
+      if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+      let data: any;
+      try { data = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
       if (data.error?.code === 403) {
         throw new Error("API quota exceeded. Please try again tomorrow.");
       }
@@ -144,7 +154,10 @@ export async function fetchCompleteChannelData(
       const res = await fetch(
         `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${searchHandle}&key=${YT_API_KEY}`
       );
-      const data = await res.json();
+      const text = await res.text();
+      if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+      let data: any;
+      try { data = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
       if (data.error?.code === 403) {
         throw new Error("API quota exceeded. Please try again tomorrow.");
       }
@@ -154,7 +167,10 @@ export async function fetchCompleteChannelData(
         const channelRes = await fetch(
           `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&id=${channelId}&key=${YT_API_KEY}`
         );
-        const channelDataRes = await channelRes.json();
+        const channelText = await channelRes.text();
+        if (!channelText || channelText.trim() === "") throw new Error("Empty response from YouTube API");
+        let channelDataRes: any;
+        try { channelDataRes = JSON.parse(channelText); } catch { throw new Error("Invalid response from YouTube API"); }
         channelData = channelDataRes.items?.[0] || null;
       }
     } catch (err: any) {
@@ -189,7 +205,10 @@ export async function fetchCompleteChannelData(
   do {
     const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails,snippet&playlistId=${uploadsPlaylistId}&maxResults=50&key=${YT_API_KEY}${nextPageToken ? "&pageToken=" + nextPageToken : ""}`;
     const res = await fetch(url);
-    const data = await res.json();
+    const text = await res.text();
+    if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+    let data: any;
+    try { data = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
 
     if (data.error) break;
 
@@ -214,7 +233,10 @@ export async function fetchCompleteChannelData(
     const res = await fetch(
       `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${batch}&key=${YT_API_KEY}`
     );
-    const data = await res.json();
+    const text = await res.text();
+    if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+    let data: any;
+    try { data = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
     allVideos = [...allVideos, ...(data.items || [])];
 
     onProgress?.({
@@ -243,7 +265,10 @@ export async function fetchCompleteChannelData(
       const res = await fetch(
         `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${video.id}&maxResults=100&order=relevance&key=${YT_API_KEY}`
       );
-      const data = await res.json();
+      const text = await res.text();
+      if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+      let data: any;
+      try { data = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
       if (!data.error) {
         commentsMap[video.id] = (data.items || []).map((item: any) => ({
           id: item.id,
@@ -499,19 +524,28 @@ export async function searchChannel(query: string): Promise<string | null> {
 
   try {
     const r = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=${clean}&key=${YT_API_KEY}`);
-    const d = await r.json();
+    const text = await r.text();
+    if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+    let d: any;
+    try { d = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
     if (d.items?.[0]?.id) return d.items[0].id;
   } catch {}
 
   try {
     const r = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=id&forUsername=${clean}&key=${YT_API_KEY}`);
-    const d = await r.json();
+    const text = await r.text();
+    if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+    let d: any;
+    try { d = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
     if (d.items?.[0]?.id) return d.items[0].id;
   } catch {}
 
   try {
     const r = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(clean)}&maxResults=1&key=${YT_API_KEY}`);
-    const d = await r.json();
+    const text = await r.text();
+    if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+    let d: any;
+    try { d = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
     if (d.items?.[0]?.snippet?.channelId) return d.items[0].snippet.channelId;
     if (d.items?.[0]?.id?.channelId) return d.items[0].id.channelId;
   } catch {}
@@ -522,7 +556,10 @@ export async function searchChannel(query: string): Promise<string | null> {
 export async function getChannelById(channelId: string): Promise<ChannelData | null> {
   try {
     const r = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings&id=${channelId}&key=${YT_API_KEY}`);
-    const d = await r.json();
+    const text = await r.text();
+    if (!text || text.trim() === "") throw new Error("Empty response from YouTube API");
+    let d: any;
+    try { d = JSON.parse(text); } catch { throw new Error("Invalid response from YouTube API"); }
     const ch = d.items?.[0];
     if (!ch) return null;
     const subs = parseInt(ch.statistics?.subscriberCount || "0");
@@ -554,17 +591,26 @@ export async function getChannelById(channelId: string): Promise<ChannelData | n
 export async function getChannelVideos(channelId: string, maxResults = 10): Promise<VideoData[]> {
   try {
     const chRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${YT_API_KEY}`);
-    const chData = await chRes.json();
+    const chText = await chRes.text();
+    if (!chText || chText.trim() === "") throw new Error("Empty response from YouTube API");
+    let chData: any;
+    try { chData = JSON.parse(chText); } catch { throw new Error("Invalid response from YouTube API"); }
     const uploadsId = chData.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
     if (!uploadsId) return [];
 
     const plRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=${uploadsId}&maxResults=${maxResults}&key=${YT_API_KEY}`);
-    const plData = await plRes.json();
+    const plText = await plRes.text();
+    if (!plText || plText.trim() === "") throw new Error("Empty response from YouTube API");
+    let plData: any;
+    try { plData = JSON.parse(plText); } catch { throw new Error("Invalid response from YouTube API"); }
     const ids = plData.items?.map((i: any) => i.contentDetails.videoId).join(",");
     if (!ids) return [];
 
     const vRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${ids}&key=${YT_API_KEY}`);
-    const vData = await vRes.json();
+    const vText = await vRes.text();
+    if (!vText || vText.trim() === "") throw new Error("Empty response from YouTube API");
+    let vData: any;
+    try { vData = JSON.parse(vText); } catch { throw new Error("Invalid response from YouTube API"); }
 
     return (vData.items || []).map((v: any) => ({
       id: v.id,

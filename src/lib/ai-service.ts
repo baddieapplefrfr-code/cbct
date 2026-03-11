@@ -38,7 +38,7 @@ const CACHE_MS = 45_000;
 
 async function tryOllama(model: string, sys: string, user: string, maxTokens: number): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
+  const timer = setTimeout(() => controller.abort(), 30000);
   try {
     const res = await fetch(OLLAMA_URL, {
       method: "POST",
@@ -56,8 +56,14 @@ async function tryOllama(model: string, sys: string, user: string, maxTokens: nu
     });
     clearTimeout(timer);
     if (!res.ok) return null;
-    const data = await res.json();
-    return data.message?.content ?? null;
+    const text = await res.text();
+    if (!text || text.trim() === "") return null;
+    try {
+      const data = JSON.parse(text);
+      return data.message?.content ?? null;
+    } catch {
+      return null;
+    }
   } catch {
     clearTimeout(timer);
     return null;
@@ -145,13 +151,45 @@ export async function streamAI(
 
 export function parseJsonSafely(text: string): any {
   if (!text) return null;
-  try { return JSON.parse(text); } catch {}
-  const s = text.replace(/```(?:json)?\s*/g, "").replace(/```\s*/g, "").trim();
+  
+  // Clean markdown fences
+  let s = text.replace(/```(?:json)?\s*/g, "").replace(/```\s*/g, "").trim();
+  
+  // Try direct parse
   try { return JSON.parse(s); } catch {}
-  const obj = s.match(/\{[\s\S]*\}/);
-  if (obj) { try { return JSON.parse(obj[0]); } catch {} }
-  const arr = s.match(/\[[\s\S]*\]/);
-  if (arr) { try { return JSON.parse(arr[0]); } catch {} }
+  
+  // Try to extract and auto-close incomplete JSON object
+  const objStart = s.indexOf("{");
+  if (objStart !== -1) {
+    let snippet = s.slice(objStart);
+    // Count braces to detect truncation
+    let open = 0;
+    let lastValid = 0;
+    for (let i = 0; i < snippet.length; i++) {
+      if (snippet[i] === "{") open++;
+      if (snippet[i] === "}") { open--; if (open === 0) { lastValid = i; break; } }
+    }
+    if (lastValid > 0) {
+      try { return JSON.parse(snippet.slice(0, lastValid + 1)); } catch {}
+    }
+    // Force-close unclosed JSON
+    while (open > 0) { snippet += "}"; open--; }
+    try { return JSON.parse(snippet); } catch {}
+  }
+
+  // Try array extraction
+  const arrStart = s.indexOf("[");
+  if (arrStart !== -1) {
+    let snippet = s.slice(arrStart);
+    let open = 0;
+    for (let i = 0; i < snippet.length; i++) {
+      if (snippet[i] === "[") open++;
+      if (snippet[i] === "]") { open--; if (open === 0) { try { return JSON.parse(snippet.slice(0, i + 1)); } catch {} break; } }
+    }
+    while (open > 0) { snippet += "]"; open--; }
+    try { return JSON.parse(snippet); } catch {}
+  }
+
   return null;
 }
 
