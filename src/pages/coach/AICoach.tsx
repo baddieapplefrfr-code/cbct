@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Bot, Send, Zap, MessageSquare, Heart, Swords, Trash2 } from "lucide-react";
+import { Bot, Send, Zap, MessageSquare, Heart, Swords, Trash2, Flame, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
@@ -14,12 +14,11 @@ interface Message {
   content: string;
 }
 
-const quickActions = [
-  { label: "What should I post?", icon: Zap },
-  { label: "Review my channel", icon: MessageSquare },
-  { label: "I'm feeling burnt out", icon: Heart },
-  { label: "Help me beat my competitor", icon: Swords },
-];
+interface ChannelInfo {
+  name: string;
+  subscribers: number;
+  bestDay?: string;
+}
 
 export default function AICoach() {
   const navigate = useNavigate();
@@ -27,8 +26,21 @@ export default function AICoach() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [channelContext, setChannelContext] = useState("");
+  const [channel, setChannel] = useState<ChannelInfo | null>(null);
   const [initializing, setInitializing] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const quickActions = channel ? [
+    { label: `Why is my channel ${channel.subscribers > 100000 ? "plateauing" : "slow"}?`, icon: Zap },
+    { label: `What should I post on ${channel.bestDay || "next"}?`, icon: MessageSquare },
+    { label: "Roast my last video", icon: Flame },
+    { label: "Give me my 30-day plan", icon: TrendingUp },
+  ] : [
+    { label: "What should I post?", icon: Zap },
+    { label: "Review my channel", icon: MessageSquare },
+    { label: "I'm feeling burnt out", icon: Heart },
+    { label: "Help me beat my competitor", icon: Swords },
+  ];
 
   useEffect(() => {
     if (!isChannelConnected()) { navigate("/", { replace: true }); return; }
@@ -64,10 +76,20 @@ export default function AICoach() {
       const vids = await getRecentVideos(ch.id, 10);
       const ctx = getChannelContext(ch, vids);
       setChannelContext(ctx);
+      setChannel({ name: ch.name, subscribers: ch.subscribers, bestDay: ch.bestDay });
 
       const greeting = await callAI(
-        `You are Max, an elite YouTube growth coach. You have access to this creator's full channel data:\n${ctx}\n\nYou speak like a brilliant friend — direct, specific, encouraging but brutally honest. Never give generic advice. Every answer must reference their specific channel data.`,
-        "Generate a short, personalized opening message for this creator. Reference their latest video performance. Be warm but insightful. 2-3 sentences max."
+        `You are Max — the world's best YouTube growth coach. You are brilliant, direct, and speak like a trusted friend who happens to know everything about YouTube. You have this creator's full channel data: ${ctx}
+
+Rules you never break:
+- Every single response must reference their actual channel name, video titles, or real numbers
+- Never give generic YouTube advice that could apply to anyone
+- Always end with one specific action they can take TODAY
+- If they're feeling burnt out or emotional, acknowledge it first before advising
+- You are not a chatbot. You are their personal strategist who has studied their channel obsessively
+- Maximum 4 sentences per response unless they ask for detail
+- Use their bestDay and avgViews in every strategy recommendation`,
+        "Generate a punchy 2-sentence opening. Sentence 1: Reference their most recent video by exact title and whether it over or underperformed. Sentence 2: Tell them the single most important thing you see in their channel data right now. Sound like a coach who already did their homework, not a chatbot saying hello."
       );
       const msgs: Message[] = [{ role: "assistant", content: greeting }];
       setMessages(msgs);
@@ -102,8 +124,19 @@ export default function AICoach() {
       const history = newMessages.map(m => `${m.role === "user" ? "Creator" : "Max"}: ${m.content}`).join("\n\n");
 
       const response = await callAI(
-        `You are Max, an elite YouTube growth coach with deep knowledge of the algorithm, content strategy, and creator psychology. You have access to this creator's full channel data:\n${channelContext}\n\nYou know their wins and their struggles. You speak like a brilliant friend who genuinely cares — direct, specific, encouraging but brutally honest. Never give generic advice. Every answer must reference their specific channel data. Keep responses concise (3-5 sentences unless they ask for detail).`,
-        `Conversation so far:\n${history}\n\nRespond to the creator's latest message.`
+        `You are Max — the world's best YouTube growth coach. You are brilliant, direct, and speak like a trusted friend who happens to know everything about YouTube. You have this creator's full channel data: ${channelContext}
+
+Rules you never break:
+- Every single response must reference their actual channel name, video titles, or real numbers
+- Never give generic YouTube advice that could apply to anyone
+- Always end with one specific action they can take TODAY
+- If they're feeling burnt out or emotional, acknowledge it first before advising
+- You are not a chatbot. You are their personal strategist who has studied their channel obsessively
+- Maximum 4 sentences per response unless they ask for detail
+- Use their bestDay and avgViews in every strategy recommendation
+
+Conversation so far:\n${history}`,
+        "Respond to the creator's latest message."
       );
 
       const updatedMessages = [...newMessages, { role: "assistant" as const, content: response }];
@@ -151,7 +184,7 @@ export default function AICoach() {
 
           {messages.map((m, i) => (
             <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border border-border"}`}>
+              <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border border-border"}`} style={m.role === "assistant" ? { borderLeft: "3px solid hsl(var(--primary) / 0.4)", paddingLeft: "12px" } : {}}>
                 <p className="text-sm whitespace-pre-wrap">{m.content}</p>
               </div>
             </motion.div>
@@ -169,6 +202,16 @@ export default function AICoach() {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {messages[messages.length - 1]?.role === "assistant" && !loading && (
+            <div className="flex gap-2 flex-wrap px-4 pb-2">
+              {["Tell me more", "Give me the action steps"].map(s => (
+                <button key={s} onClick={() => { setInput(s); }} className="text-xs px-3 py-1.5 rounded-full border border-border hover:border-primary hover:text-primary transition-colors">
+                  {s}
+                </button>
+              ))}
             </div>
           )}
 
@@ -190,7 +233,7 @@ export default function AICoach() {
       )}
 
       {/* Input */}
-      <div className="px-6 py-4 border-t border-border bg-card/50 backdrop-blur-sm">
+      <div className="sticky bottom-0 p-4 backdrop-blur-md" style={{ background: "hsl(var(--background) / 0.8)", borderTop: "1px solid hsl(var(--border) / 0.5)" }}>
         <div className="max-w-2xl mx-auto flex gap-3">
           <Input
             value={input}

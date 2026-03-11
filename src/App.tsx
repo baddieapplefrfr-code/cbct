@@ -1,11 +1,27 @@
+import { useState } from 'react'
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import type { AnalysisData, NicheOption } from "@/shared/types";
+
+// Layout
+import AppLayout from "./components/AppLayout";
+
+// New Core Pages
+import Overview from "./pages/Overview";
+import Analyze from "./pages/Analyze";
+import PreUpload from "./pages/PreUpload";
+import Scripts from "./pages/Scripts";
+import Trends from "./pages/Trends";
+import Competitors from "./pages/Competitors";
+import DailyBrief from "./pages/DailyBrief";
+import Reports from "./pages/Reports";
+
+// Original Pages
 import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
-import AppLayout from "./components/AppLayout";
 import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
 
@@ -74,16 +90,29 @@ import AICoach from "./pages/coach/AICoach";
 const queryClient = new QueryClient();
 const withLayout = (page: React.ReactNode) => <AppLayout>{page}</AppLayout>;
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/dashboard" element={withLayout(<Dashboard />)} />
+const App = () => {
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  const [niche, setNiche] = useState<NicheOption>('General');
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Overview analysisData={analysisData} setAnalysisData={setAnalysisData} />} />
+            <Route path="/analyze" element={<Analyze setAnalysisData={setAnalysisData} />} />
+            <Route path="/preupload" element={withLayout(<PreUpload />)} />
+            <Route path="/scripts" element={withLayout(<Scripts />)} />
+            <Route path="/trends" element={withLayout(<Trends />)} />
+            <Route path="/competitors" element={withLayout(<Competitors />)} />
+            <Route path="/daily-brief" element={withLayout(<DailyBrief niche={niche} />)} />
+            <Route path="/reports" element={withLayout(<Reports analysisData={analysisData} />)} />
+
+            <Route path="/landing" element={<Landing />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/dashboard" element={withLayout(<Dashboard />)} />
 
           {/* DIAGNOSE */}
           <Route path="/diagnose/video-death" element={withLayout(<VideoDeath />)} />
@@ -152,6 +181,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

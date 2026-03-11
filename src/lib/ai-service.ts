@@ -3,11 +3,11 @@ const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 // Verified working models — primary first, free fallbacks after
 const MODELS = [
+  "anthropic/claude-3-haiku",
   "openai/gpt-4o-mini",
-  "meta-llama/llama-3.1-8b-instruct:free",
-  "google/gemma-2-9b-it:free",
-  "qwen/qwen-2.5-7b-instruct:free",
+  "meta-llama/llama-3.3-8b-instruct:free",
   "mistralai/mistral-7b-instruct:free",
+  "google/gemma-3-12b-it:free",
 ];
 
 type AIStatus = "ok" | "slow" | "limited";

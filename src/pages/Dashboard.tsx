@@ -37,7 +37,7 @@ export default function Dashboard() {
     if (!channel || videos.length === 0) return;
     setBriefLoading(true);
     callAI(
-      "You are a YouTube growth coach. Respond with EXACTLY 3 bullet points. Each bullet must contain a specific number or day. Start each with •. No preamble. No intro sentence. Just the 3 bullets. Never be vague.",
+      "You are a brutally direct YouTube growth coach. Give EXACTLY 3 numbered action items. Each must be specific, contain a real number or day from their data, and tell them exactly what to do. Format each as a plain sentence starting with an action verb. No bullet points. No preamble. Example: 'Post on Thursday at 3pm — it gets you 2x your average views based on your upload history.'",
       `Channel: ${channel.name}. ${subscribers} subs. Avg views: ${avgViews}. Best day: ${channel.bestDay}. Upload frequency: ${channel.uploadFrequency}. Last 5 videos: ${videos.slice(0,5).map(v=>`"${v.title}" got ${v.views} views`).join(", ")}.`
     ).then(r => setBrief(r)).catch(() => setBrief("")).finally(() => setBriefLoading(false));
   }, [channel?.name]);
@@ -69,7 +69,7 @@ export default function Dashboard() {
   const channelScore = channel ? calcChannelScore(videos, channel.subscribers) : 0;
   const latestVideo = videos[0];
   const isUnderperforming = latestVideo && avgViews > 0 && latestVideo.views < avgViews * 0.6;
-  const briefLines = brief.split("\n").filter(l => l.trim().startsWith("•") || l.trim().startsWith("-")).slice(0, 3);
+  const briefLines = brief.split(/\n/).map(l => l.replace(/^\d+\.\s*/, "• ").trim()).filter(l => l.startsWith("•")).slice(0, 3);
 
   const metrics = [
     { label: "Avg Views", value: formatCount(avgViews), icon: Eye, color: "hsl(var(--cat-analyze))" },
@@ -94,6 +94,17 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── Best Time to Post Banner ───────── */}
+      {channel?.bestDay && (
+        <div className="rounded-xl px-5 py-3 flex items-center justify-between" style={{ background: "hsl(var(--primary) / 0.08)", border: "1px solid hsl(var(--primary) / 0.2)" }}>
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">Post on <span className="text-primary">{channel.bestDay}s at 3pm</span> — your highest performing upload day</span>
+          </div>
+          <span className="text-xs text-muted-foreground bg-primary/10 px-2 py-1 rounded-full">Based on your data</span>
+        </div>
+      )}
+
       {/* ── Underperforming alert ───────────── */}
       <AnimatePresence>
         {isUnderperforming && (
@@ -111,6 +122,23 @@ export default function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Worst Performer Alert (last 30 days) ─ */}
+      {(() => {
+        const last30 = videos.filter(v => (Date.now() - new Date(v.publishedAt).getTime()) / 86400000 <= 30);
+        const worst = last30.sort((a,b) => Number(a.views) - Number(b.views))[0];
+        if (!worst || !avgViews || Number(worst.views) > avgViews * 0.7) return null;
+        const pct = Math.round(((avgViews - Number(worst.views)) / avgViews) * 100);
+        return (
+          <div className="rounded-xl p-4 flex items-start gap-3" style={{ background: "hsl(var(--destructive) / 0.08)", border: "1px solid hsl(var(--destructive) / 0.2)" }}>
+            <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-destructive">"{worst.title.slice(0, 50)}..." is {pct}% below your average</p>
+              <p className="text-xs text-muted-foreground mt-1">Run the Autopsy Room to find out why → <span className="text-primary cursor-pointer underline" onClick={() => navigate("/diagnose/video-death")}>Fix it now</span></p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── OAuth Private Analytics Banner ── */}
       {!localStorage.getItem("yt_full_connect") && (
@@ -179,27 +207,25 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── AI Weekly Brief ──────────────────── */}
-      <div className="cb-card" style={{ borderLeft: "3px solid hsl(var(--primary))" }}>
-        <div className="flex items-center gap-2 mb-3">
-          <Zap className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">AI Weekly Brief</span>
+      {/* ── This Week's Action Plan ──────────── */}
+      <div className="rounded-2xl p-6" style={{ background: "hsl(var(--background-card))", border: "1px solid hsl(var(--primary) / 0.3)", boxShadow: "0 0 40px hsl(var(--primary) / 0.06)" }}>
+        <div className="flex items-center gap-2 mb-4">
+          <Zap className="h-5 w-5 text-primary" />
+          <h2 className="font-bold text-base font-display">This Week's Action Plan</h2>
         </div>
         {briefLoading ? (
           <div className="space-y-2">
-            {[1,2,3].map(i => <Skeleton key={i} className="h-4 w-full" />)}
+            {[1,2,3].map(i => <Skeleton key={i} className="h-5 w-full" />)}
           </div>
-        ) : briefLines.length > 0 ? (
-          <div className="space-y-2">
+        ) : (
+          <div className="space-y-3">
             {briefLines.map((line, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm">
-                <span className="text-primary mt-0.5 font-bold">•</span>
-                <span>{line.replace(/^[•\-]\s*/, "")}</span>
+              <div key={i} className="flex items-start gap-3 p-3 rounded-xl" style={{ background: "hsl(var(--background-section))" }}>
+                <span className="text-primary font-black text-sm mt-0.5">{i + 1}</span>
+                <p className="text-sm leading-relaxed">{line.replace(/^[•\-]\s*/, "")}</p>
               </div>
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Post consistently and engage with every comment this week.</p>
         )}
       </div>
 

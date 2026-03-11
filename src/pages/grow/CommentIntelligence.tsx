@@ -51,25 +51,7 @@ export default function CommentIntelligence() {
       const cmts = await getVideoComments(selectedVideoId, 50);
       setStep(1);
       const res = await callAI(
-        `You are a YouTube audience intelligence analyst and growth advisor. Analyse these comments and tell the creator exactly what to do.
-Return ONLY valid JSON:
-{
-  "verdict": "One sentence summary of what this audience wants most",
-  "top_video_idea": {
-    "title": "Exact video title to make next",
-    "why": "Why this would perform well based on comments",
-    "demand_score": 85,
-    "hook": "Opening line for this video"
-  },
-  "video_ideas": [
-    {"idea": "specific video title", "demand_score": 80, "proof": "exact comment that proves demand"}
-  ],
-  "content_gaps": ["topic viewers asked about that creator hasn't covered"],
-  "complaints": [{"complaint": "specific issue", "fix": "exact change to make"}],
-  "top_request": "The single most requested topic in one sentence",
-  "superfan_insights": "What your most loyal viewers have in common"
-}
-Give 6+ video_ideas. Be brutally specific.`,
+        "You are analyzing real YouTube comments. Return ONLY valid JSON, no markdown, no explanation. Format: { mood: string (one of: 'Hyped', 'Loyal', 'Curious', 'Mixed', 'Disappointed'), mood_reason: string, next_video: { title: string, hook: string, why: string }, top_requests: [{ idea: string, count: number, example_comment: string }], audience_insight: string }",
         `${channelContext}\n\nCOMMENTS (${cmts.length} total):\n${cmts.slice(0, 150).join("\n---\n")}`,
         { maxTokens: 2500 }
       );
@@ -261,116 +243,43 @@ Give 6+ video_ideas. Be brutally specific.`,
         {/* Right — Intelligence (40%) */}
         <div className={`md:col-span-2 space-y-4 ${tab === "comments" ? "hidden md:block" : ""}`}>
           {analysis && (
-            <div className="space-y-4">
-              {/* Top Video Idea */}
-              {analysis.top_video_idea && (
-                <div className="rounded-xl p-4" style={{
-                  background: "rgba(250,204,21,0.08)",
-                  border: "1px solid rgba(250,204,21,0.2)",
-                  borderLeft: "4px solid #facc15",
-                }}>
-                  <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: "#facc15" }}>
-                    � Make This Video Next
-                  </p>
-                  <p className="text-base font-bold mb-2">{analysis.top_video_idea.title}</p>
-                  <p className="text-xs text-muted-foreground mb-3">{analysis.top_video_idea.why}</p>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs font-bold">Demand Score:</span>
-                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(250,204,21,0.2)" }}>
-                      <div className="h-full rounded-full" style={{ width: `${analysis.top_video_idea.demand_score || 85}%`, background: "#facc15" }} />
+            <div className="space-y-4 mt-6">
+              {/* Mood Card */}
+              <div className="rounded-2xl p-5" style={{ background: "hsl(var(--background-card))", border: "1px solid hsl(var(--border))" }}>
+                <p className="t-label text-muted-foreground mb-1">Audience Mood</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl font-black text-primary">{analysis.mood}</span>
+                  <p className="text-sm text-muted-foreground">{analysis.mood_reason}</p>
+                </div>
+              </div>
+
+              {/* Make This Next */}
+              <div className="rounded-2xl p-5" style={{ background: "hsl(var(--primary) / 0.06)", border: "1px solid hsl(var(--primary) / 0.25)" }}>
+                <p className="t-label text-primary mb-2">🎯 Make This Video Next</p>
+                <p className="text-lg font-bold mb-1">"{analysis.next_video?.title}"</p>
+                <p className="text-sm text-muted-foreground mb-2">Hook: {analysis.next_video?.hook}</p>
+                <p className="text-xs" style={{ color: "hsl(var(--success))" }}>Why it'll work: {analysis.next_video?.why}</p>
+              </div>
+
+              {/* Top Requests */}
+              <div className="space-y-2">
+                <p className="t-label text-muted-foreground">What Your Audience Is Asking For</p>
+                {analysis.top_requests?.map((r: any, i: number) => (
+                  <div key={i} className="rounded-xl p-4 flex items-start gap-3" style={{ background: "hsl(var(--background-card))" }}>
+                    <span className="text-primary font-black text-sm">#{i+1}</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold">{r.idea}</p>
+                      <p className="text-xs text-muted-foreground mt-1">"{r.example_comment}"</p>
                     </div>
-                    <span className="text-xs font-bold">{analysis.top_video_idea.demand_score || 85}</span>
+                    <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-bold">{r.count} asked</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    <strong>Hook:</strong> "{analysis.top_video_idea.hook}"
-                  </p>
-                  <Button 
-                    size="sm" 
-                    className="w-full rounded-lg text-xs"
-                    onClick={() => navigate(`/create/video-machine?topic=${encodeURIComponent(analysis.top_video_idea.title)}`)}
-                  >
-                    Build This Video → <ArrowRight className="ml-1 h-3 w-3" />
-                  </Button>
-                </div>
-              )}
+                ))}
+              </div>
 
-              {/* Verdict */}
-              {analysis.verdict && (
-                <div className="rounded-xl p-4" style={{ background: "hsl(var(--primary) / 0.06)", border: "1px solid hsl(var(--primary) / 0.15)" }}>
-                  <p className="text-xs font-bold uppercase tracking-wider text-primary mb-1">🔥 Audience Verdict</p>
-                  <p className="text-sm">{analysis.verdict}</p>
-                </div>
-              )}
-
-              {/* More Video Ideas */}
-              {analysis.video_ideas && analysis.video_ideas.length > 0 && (
-                <div className="cb-card">
-                  <p className="t-label text-muted-foreground mb-3">More Video Ideas</p>
-                  {analysis.video_ideas.slice(0, 4).map((idea: any, i: number) => (
-                    <div key={i} className="mb-3 pb-3 border-b border-border/30 last:border-0 last:pb-0 last:mb-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm flex-1 font-medium">{idea.idea}</span>
-                        <span className="text-xs font-bold text-primary">{idea.demand_score}x</span>
-                      </div>
-                      {idea.proof && (
-                        <p className="text-xs text-muted-foreground mb-2">"Because: {idea.proof}"</p>
-                      )}
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="w-full mt-2 rounded-lg text-xs"
-                        onClick={() => navigate(`/create/video-machine?topic=${encodeURIComponent(idea.idea)}`)}
-                      >
-                        Build This → <ArrowRight className="ml-1 h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Top Request */}
-              {analysis.top_request && (
-                <div className="rounded-xl p-4" style={{ background: "hsl(var(--info) / 0.06)", border: "1px solid hsl(var(--info) / 0.15)" }}>
-                  <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: "hsl(var(--info))" }}>
-                    💬 Most Requested Topic
-                  </p>
-                  <p className="text-sm">{analysis.top_request}</p>
-                </div>
-              )}
-
-              {/* Content Gaps */}
-              {analysis.content_gaps && analysis.content_gaps.length > 0 && (
-                <div className="cb-card">
-                  <p className="t-label text-muted-foreground mb-3">📚 Content Gaps to Fill</p>
-                  {analysis.content_gaps.slice(0, 3).map((gap: string, i: number) => (
-                    <div key={i} className="flex items-center gap-2 mb-2">
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: "hsl(var(--destructive))" }} />
-                      <span className="text-sm">{gap}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Complaints */}
-              {analysis.complaints && analysis.complaints.length > 0 && (
-                <div className="cb-card">
-                  <p className="t-label text-muted-foreground mb-3">⚠️ Issues to Fix</p>
-                  {analysis.complaints.slice(0, 3).map((c: any, i: number) => (
-                    <div key={i} className="mb-3 pb-3 border-b border-border/30 last:border-0 last:pb-0 last:mb-0">
-                      <p className="text-sm font-medium mb-1">{c.complaint}</p>
-                      <p className="text-xs text-muted-foreground">Fix: {c.fix}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Superfan Insights */}
-              {analysis.superfan_insights && (
-                <div className="cb-card">
-                  <p className="t-label text-muted-foreground mb-3">🏆 Superfan Insights</p>
-                  <p className="text-sm">{analysis.superfan_insights}</p>
-                </div>
-              )}
+              {/* Audience Insight */}
+              <div className="rounded-xl p-4" style={{ borderLeft: "3px solid hsl(var(--info))", background: "hsl(var(--info) / 0.05)" }}>
+                <p className="text-sm">{analysis.audience_insight}</p>
+              </div>
             </div>
           )}
         </div>
